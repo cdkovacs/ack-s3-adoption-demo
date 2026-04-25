@@ -1,6 +1,6 @@
 # ACK S3 Adoption Demo
 
-A scripted, re-runnable test that proves the [AWS Controllers for Kubernetes](https://aws-controllers-k8s.github.io/community/) (ACK) S3 controller can **adopt** an S3 bucket previously managed by Terraform — without losing data or mutating bucket configuration.
+A scripted, re-runnable test that proves the [AWS Controllers for Kubernetes](https://aws-controllers-k8s.github.io/community/) (ACK) S3 controller can **adopt** an S3 bucket previously managed by Terraform without losing data or mutating bucket configuration.
 
 ![demo gif](demo.gif)
 
