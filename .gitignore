@@ -1,0 +1,21 @@
+# Secrets — must stay out of git
+.env
+
+# Local development files
+.idea
+.claude
+
+# Per-run state written by the scripts
+.run-bucket-name
+.run-etags.json
+
+# Terraform
+terraform/.terraform/
+terraform/terraform.tfstate
+terraform/terraform.tfstate.backup
+terraform/terraform.tfstate.*.backup
+terraform/*.tfplan
+terraform/*.tfvars
+terraform/*.tfvars.json
+terraform/crash.log
+terraform/crash.*.log
