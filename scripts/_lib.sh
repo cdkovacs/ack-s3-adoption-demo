@@ -16,6 +16,7 @@ fi
 NAMESPACE="ack-system"
 SECRET_NAME="ack-s3-user-creds"
 BUCKET_NAME_FILE="$DEMO_DIR/.run-bucket-name"
+NEW_BUCKET_NAME_FILE="$DEMO_DIR/.run-new-bucket-name"
 ETAGS_FILE="$DEMO_DIR/.run-etags.json"
 
 require_env() {

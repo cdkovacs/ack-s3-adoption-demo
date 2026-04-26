@@ -18,7 +18,7 @@ banner "10 terraform create + seed"
 banner "20 terraform state rm"
 "$SCRIPT_DIR/scripts/20-tf-state-rm.sh"
 
-banner "30 ack adopt"
+banner "30 ack adopt-or-create (existing bucket + new bucket)"
 "$SCRIPT_DIR/scripts/30-adopt.sh"
 
 banner "40 validate"

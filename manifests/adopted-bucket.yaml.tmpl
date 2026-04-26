@@ -3,8 +3,14 @@ kind: Bucket
 metadata:
   name: ${BUCKET_NAME}
   annotations:
-    services.k8s.aws/adoption-policy: "adopt"
-    services.k8s.aws/adoption-fields: |
-      {"name": "${BUCKET_NAME}"}
+    services.k8s.aws/adoption-policy: "adopt-or-create"
 spec:
   name: ${BUCKET_NAME}
+  versioning:
+    status: Enabled
+  tagging:
+    tagSet:
+      - key: Purpose
+        value: ack-adoption-demo
+      - key: ManagedBy
+        value: ${MANAGED_BY}

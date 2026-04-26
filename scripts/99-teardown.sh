@@ -4,8 +4,9 @@ set -uo pipefail
 # shellcheck source=_lib.sh
 source "$(dirname "${BASH_SOURCE[0]}")/_lib.sh"
 
-BUCKET_NAME=""
-[[ -f "$BUCKET_NAME_FILE" ]] && BUCKET_NAME=$(cat "$BUCKET_NAME_FILE")
+BUCKETS=()
+[[ -f "$BUCKET_NAME_FILE"     ]] && BUCKETS+=("$(cat "$BUCKET_NAME_FILE")")
+[[ -f "$NEW_BUCKET_NAME_FILE" ]] && BUCKETS+=("$(cat "$NEW_BUCKET_NAME_FILE")")
 
 empty_versioned_bucket() {
   local bucket=$1
@@ -24,22 +25,24 @@ empty_versioned_bucket() {
   rm -f /tmp/ack-demo-delete.json
 }
 
-if [[ -n "$BUCKET_NAME" ]]; then
+for BUCKET_NAME in "${BUCKETS[@]}"; do
+  [[ -z "$BUCKET_NAME" ]] && continue
+
   if aws s3api head-bucket --bucket "$BUCKET_NAME" --region "$AWS_REGION" 2>/dev/null; then
     echo ">> emptying $BUCKET_NAME"
     empty_versioned_bucket "$BUCKET_NAME"
   fi
 
-  echo ">> deleting Bucket CR (ACK will delete the bucket in AWS)"
+  echo ">> deleting Bucket CR $BUCKET_NAME (ACK will delete the bucket in AWS)"
   kubectl delete bucket "$BUCKET_NAME" --ignore-not-found --wait=true --timeout=60s 2>/dev/null || true
 
   # Fallback: if ACK didn't delete (controller missing, CR never existed, etc.)
   if aws s3api head-bucket --bucket "$BUCKET_NAME" --region "$AWS_REGION" 2>/dev/null; then
-    echo ">> bucket still in AWS; deleting directly"
+    echo ">> $BUCKET_NAME still in AWS; deleting directly"
     empty_versioned_bucket "$BUCKET_NAME"
     aws s3api delete-bucket --bucket "$BUCKET_NAME" --region "$AWS_REGION" 2>/dev/null || true
   fi
-fi
+done
 
 echo ">> uninstalling ACK controller"
 helm uninstall ack-s3-controller -n "$NAMESPACE" --ignore-not-found 2>/dev/null || true
@@ -53,6 +56,7 @@ rm -rf "$DEMO_DIR/terraform/.terraform" \
        "$DEMO_DIR/terraform/terraform.tfstate" \
        "$DEMO_DIR/terraform/terraform.tfstate.backup" \
        "$BUCKET_NAME_FILE" \
+       "$NEW_BUCKET_NAME_FILE" \
        "$ETAGS_FILE"
 
 echo ">> teardown complete"

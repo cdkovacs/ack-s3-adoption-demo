@@ -1,18 +1,24 @@
 # ACK S3 Adoption Demo
 
-A scripted, re-runnable test that proves the [AWS Controllers for Kubernetes](https://aws-controllers-k8s.github.io/community/) (ACK) S3 controller can **adopt** an S3 bucket previously managed by Terraform without losing data or mutating bucket configuration.
+A scripted, re-runnable test that exercises the [AWS Controllers for Kubernetes](https://aws-controllers-k8s.github.io/community/) (ACK) S3 controller's `adopt-or-create` adoption policy on **both branches** in a single run: adopting an existing terraform-created bucket *and* creating a brand-new bucket from spec — same annotation, same template, two different runtime paths.
 
 ![demo gif](demo.gif)
 
 ## What it does
 
 1. Installs the ACK S3 controller into a local Rancher cluster (Helm).
-2. Uses Terraform to create an S3 bucket with versioning, a tag, and three seeded objects.
+2. Uses Terraform to create an S3 bucket with versioning, two tags, and three seeded objects.
 3. Runs `terraform state rm` so Terraform forgets the bucket (without deleting it in AWS).
-4. Applies a `Bucket` custom resource with the `services.k8s.aws/adoption-policy: adopt` annotation so the ACK controller adopts the existing bucket.
-5. Validates that the bucket still exists, versioning is still on, the tag is unchanged, every seeded object's ETag matches the pre-adoption baseline, and the CR reports `ACK.ResourceSynced=True` with an ARN populated.
+4. Applies **two** `Bucket` custom resources, both with `services.k8s.aws/adoption-policy: adopt-or-create`:
+   - One whose `spec.name` matches the existing terraform bucket → **adopt path** (ACK reads the live resource, populates status, leaves config alone because spec mirrors actual state).
+   - One whose `spec.name` is brand new → **create path** (no AWS resource exists, so ACK creates it from spec with the same versioning + tagging).
+5. Validates **both** buckets:
+   - Existing bucket: still exists, versioning still Enabled, both tags unchanged, every seeded object's ETag matches the pre-adoption baseline, CR reports `ACK.ResourceSynced=True` with an ARN populated.
+   - New bucket: exists in AWS, versioning Enabled, tags from spec applied, CR reports `ACK.ResourceSynced=True` with an ARN populated.
 
-A clean teardown script removes everything in the right order (empty bucket → delete CR → uninstall controller → wipe Terraform state) and tolerates partial state from a failed prior run.
+A clean teardown script removes everything in the right order (empty both buckets → delete both CRs → uninstall controller → wipe Terraform state) and tolerates partial state from a failed prior run.
+
+> **Why `adopt-or-create` instead of `adopt`?** `adopt` errors out if the AWS resource is missing — useful when you *only* ever want to import. `adopt-or-create` is the right policy when the same manifest needs to work whether the resource was pre-provisioned (by Terraform, CloudFormation, or a human) or not — typical for GitOps flows where the CR is the single source of truth going forward.
 
 ## Prerequisites
 
@@ -125,15 +131,15 @@ demo/
 ├── .env.example                 # template for .env (gitignored)
 ├── terraform/                   # bucket + seeded objects, ETags exported
 ├── manifests/
-│   └── adopted-bucket.yaml.tmpl # Bucket CR with the adopt annotation
+│   └── adopted-bucket.yaml.tmpl # Bucket CR template (adopt-or-create), rendered twice
 ├── scripts/
 │   ├── _lib.sh                  # shared env loading + helpers
 │   ├── 00-install-ack.sh        # helm install + credentials Secret
 │   ├── 10-tf-create.sh          # terraform apply, dump ETag baseline
 │   ├── 20-tf-state-rm.sh        # remove every resource from state
-│   ├── 30-adopt.sh              # apply CR, poll ACK.ResourceSynced
-│   ├── 40-validate.sh           # 5 checks; non-zero exit on any failure
-│   └── 99-teardown.sh           # tolerant cleanup
+│   ├── 30-adopt.sh              # apply both CRs (adopt + create), poll ACK.ResourceSynced
+│   ├── 40-validate.sh           # validates both buckets; non-zero exit on any failure
+│   └── 99-teardown.sh           # tolerant cleanup of both buckets
 └── demo.sh                      # orchestrator
 ```
 
@@ -146,4 +152,5 @@ demo/
   Look for `NoCredentialProviders` or auth errors.
 - **Helm install warns "values not used"** — the chart's credential value keys vary by version. Run `helm show values oci://public.ecr.aws/aws-controllers-k8s/s3-chart --version <X>` and update the `--set` flags in `00-install-ack.sh`.
 - **Bucket name collision** — fresh suffix per run normally avoids this. If a prior teardown left a bucket behind, run `./demo/scripts/99-teardown.sh` (it tolerates "already gone").
-- **Validation failed on versioning/tag** — this is the failure mode the test was built to catch: the controller mutated bucket config on adopt rather than just importing it. Capture the controller version and file an issue with the project.
+- **Validation failed on versioning/tag for the adopted bucket** — under `adopt-or-create` the controller reconciles spec against actual state. Make sure the existing-bucket CR's spec mirrors what Terraform set (versioning Enabled, both tags). If spec under-specifies, ACK will *remove* the missing tag to match spec — that's spec drift correction, not a controller bug. If the spec already mirrors actual state and validation still fails, then the controller is mutating config on adopt: capture the controller version and file an issue.
+- **`adopt-or-create` annotation appears ignored** — requires ACK runtime ≥ v0.30.0. Older charts only understand `adopt` and silently skip the new policy. `helm show chart oci://public.ecr.aws/aws-controllers-k8s/s3-chart --version <X>` shows the bundled runtime version.
